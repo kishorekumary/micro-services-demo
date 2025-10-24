@@ -14,8 +14,33 @@ CREATE TABLE IF NOT EXISTS orders (
     order_id SERIAL PRIMARY KEY,
     item TEXT,
     quantity INT,
-    price NUMERIC
+    price NUMERIC,
+    status VARCHAR(50) DEFAULT 'pending',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Create a function to update the updated_at column
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Drop the trigger if it exists
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_orders_updated_at') THEN
+        -- Create a trigger to update the updated_at column on row update
+        EXECUTE '
+        CREATE TRIGGER update_orders_updated_at
+        BEFORE UPDATE ON orders
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();';
+    END IF;
+END$$;
 """
 
 def wait_for_db():

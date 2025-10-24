@@ -1,6 +1,8 @@
-from fastapi import FastAPI, Form, UploadFile, File
+from fastapi import FastAPI, Form, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse
 from minio_client import upload_file
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import json
 import psycopg2
 import os
@@ -8,8 +10,30 @@ from db import get_connection
 from cache import r
 from mq import publish_order
 from dotenv import load_dotenv
+import time
 load_dotenv()
-app = FastAPI(title="Event-Driven Order App", port=int(os.getenv("PORT", "8000")))
+
+app = FastAPI(title="Event-Driven Order App")
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Pydantic models
+class OrderCreate(BaseModel):
+    item: str
+    quantity: int
+    price: float
+
+class OrderResponse(BaseModel):
+    order_id: int
+    item: str
+    quantity: int
+    price: float
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -26,12 +50,26 @@ def index():
     return html
 
 
-@app.post("/create_order")
-async def create_order(item: str = Form(...), quantity: int = Form(...), price: float = Form(...)):
-    order = {"order_id": int(quantity * 1000), "item": item, "quantity": quantity, "price": price}
-    publish_order(order)
-    return {"status": "Order queued", "order": order}
-
+@app.post("/create_order", response_model=OrderResponse)
+async def create_order(order: OrderCreate):
+    try:
+        if order.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+        if order.price <= 0:
+            raise HTTPException(status_code=400, detail="Price must be greater than 0")
+        order_id = int(order.quantity * 1000) + int(time.time()*1000) % 10000
+        # Create a dictionary with all order data including the generated order_id
+        order_data = {
+            "order_id": order_id,
+            "item": order.item,
+            "quantity": order.quantity,
+            "price": order.price,
+            "status": "created"
+        }
+        publish_order(order_data)
+        return {"status": "Order queued", "order_id": order_id, "item": order.item, "quantity": order.quantity, "price": order.price}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/orders/{order_id}")
 async def get_order(order_id: int):
