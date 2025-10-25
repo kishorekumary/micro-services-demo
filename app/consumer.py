@@ -13,7 +13,7 @@ from functools import wraps
 from db import get_connection
 from cache import r
 from dotenv import load_dotenv
-
+from search_client import index_order
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -100,6 +100,12 @@ def process_order(conn, order: Dict[str, Any]) -> None:
             3600,  # 1 hour TTL
             json.dumps(order)
         )
+        # Index into Elasticsearch (non-blocking for processing flow)
+        try:
+            index_order(order)
+            logger.info(f"Indexed order {order['order_id']} in Elasticsearch")
+        except Exception as e:
+            logger.warning(f"Failed to index order {order['order_id']}: {e}")
         logger.info(f"Processed order {order['order_id']}")
 
 def get_rabbitmq_connection():
@@ -254,6 +260,11 @@ def start_consumer():
             logger.error(f"Unexpected error: {e}", exc_info=True)
             time.sleep(5)
             continue
+
+def callback(ch, method, properties, body):
+    order = json.loads(body.decode())
+    index_order(order)
+    ch.basic_ack(delivery_tag=method.delivery_tag)
 
 if __name__ == "__main__":
     logger.info("Starting order processing consumer...")

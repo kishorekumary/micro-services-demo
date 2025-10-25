@@ -9,6 +9,7 @@ import os
 from db import get_connection
 from cache import r
 from mq import publish_order
+from search_client import search_orders
 from dotenv import load_dotenv
 import time
 load_dotenv()
@@ -34,6 +35,7 @@ class OrderResponse(BaseModel):
     item: str
     quantity: int
     price: float
+    status: str
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -49,25 +51,34 @@ def index():
     """
     return html
 
+@app.get("/search")
+async def search_orders_api(q: str):
+    try:
+        results = search_orders(q)
+        return {"results": results}
+    except Exception as e:
+        # Return a friendly error if ES is not reachable or query fails
+        raise HTTPException(status_code=503, detail=f"Search service error: {e}")
+
 
 @app.post("/create_order", response_model=OrderResponse)
-async def create_order(order: OrderCreate):
+async def create_order(item: str = Form(...), quantity: int = Form(...), price: float = Form(...)):
     try:
-        if order.quantity <= 0:
+        if quantity <= 0:
             raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
-        if order.price <= 0:
+        if price <= 0:
             raise HTTPException(status_code=400, detail="Price must be greater than 0")
-        order_id = int(order.quantity * 1000) + int(time.time()*1000) % 10000
+        order_id = int(quantity * 1000) + int(time.time()*1000) % 10000
         # Create a dictionary with all order data including the generated order_id
         order_data = {
             "order_id": order_id,
-            "item": order.item,
-            "quantity": order.quantity,
-            "price": order.price,
+            "item": item,
+            "quantity": quantity,
+            "price": price,
             "status": "created"
         }
         publish_order(order_data)
-        return {"status": "Order queued", "order_id": order_id, "item": order.item, "quantity": order.quantity, "price": order.price}
+        return {"status": "Order queued", "order_id": order_id, "item": item, "quantity": quantity, "price": price}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
