@@ -3,7 +3,7 @@ from elasticsearch import Elasticsearch, helpers
 import os
 from dotenv import load_dotenv
 
-load_dotenv(dotenv_path=".env.local")
+load_dotenv(dotenv_path=".env")
 # Connect to Postgres
 pg_conn = psycopg2.connect(
     dbname=os.getenv("POSTGRES_DB", "orders_db"),

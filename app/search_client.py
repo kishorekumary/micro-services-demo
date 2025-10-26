@@ -5,8 +5,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 ES_HOST = os.getenv("ES_HOST", "http://elasticsearch:9200")
+print(f"🔍 DEBUG: ES_HOST = '{ES_HOST}'")
 
-es = Elasticsearch(ES_HOST)
+# Validate ES_HOST format
+if not ES_HOST or not ES_HOST.startswith(('http://', 'https://')):
+    print(f"❌ Invalid ES_HOST: '{ES_HOST}'. Using default.")
+    ES_HOST = "http://elasticsearch:9200"
+
+try:
+    es = Elasticsearch(ES_HOST)
+    print(f"✅ Elasticsearch client created successfully with host: {ES_HOST}")
+except Exception as e:
+    print(f"❌ Failed to create Elasticsearch client: {e}")
+    raise
 
 def ensure_index():
     if not es.indices.exists(index="orders"):

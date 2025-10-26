@@ -79,7 +79,7 @@ services:
         mc mb -p myminio/orders-bucket;
         exit 0;
         "
-  fastapi:
+  backend:
     build: ./app
     ports:
       - "8000:8000"
@@ -89,12 +89,21 @@ services:
       - redis
       - minio
       - elasticsearch
+    env_file:
+      - ./app/.env
     volumes:
       - ./app:/app
     command: >
       sh -c "python init_db.py && python consumer.py & uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    container_name: backend
 
-    container_name: fastapi
+  frontend:
+    build: ./frontend
+    ports:
+      - "4000:80"
+    depends_on:
+      - backend
+    container_name: frontend
 
 volumes:
   postgres_data:
